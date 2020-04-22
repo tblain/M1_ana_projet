@@ -8,6 +8,7 @@ import copy
 from scipy.signal import convolve2d
 import bottleneck as bn
 from scipy.ndimage import convolve1d
+from collections import deque
 
 # ===== get germes ====================================
 
@@ -77,14 +78,11 @@ def get_germes_regular(img, nb_points):
 
     return germes
 
-# ===== segmentation ===========================================
-
-def segmentation(img, nb_points):
-
+def init_segmentation(img, nb_points):
     # select random starting points
     germes = get_germes_regular(img, nb_points)
     print("============================")
-    print("GROWING")
+    print("INIT GROWING")
     # print(starting_points)
     # print(img.shape)
 
@@ -92,69 +90,94 @@ def segmentation(img, nb_points):
     tab = np.zeros(img.shape[:2], dtype='int')
 
     groupes = [[]]
+    checked = np.zeros([img.shape[0], img.shape[0], nb_points+1], dtype='int')
 
     # tableau qui contient pour chaque groupe la couleur moyenne
     avg_grp_col = np.zeros((nb_points+1, 3))
     # pile qui contiendra les cases ajoutes a un groupe et qui n'ont pas encore ete traitees
-    stack = []
+    stack = deque()
 
-    # palier a partir duquel la difference entre 2 couleurs est trop elevee
-    thresh = 30
 
-    nb_in_a_groupe = 0
-    nb_pixel = img.shape[0] * img.shape[1]
     nb_in_groupes = np.zeros(nb_points+1)
 
     # on parcourt les germes pour remplir les differents tableaux
     for i, (x, y) in zip(range(1, nb_points+1), germes):
         tab[x, y] = i
+        tab[x, y] = i
         groupes.append([(x, y)])
         avg_grp_col[i] = img[x, y]
         stack.append((x, y))
 
+    return tab, groupes, avg_grp_col, stack, nb_in_groupes, checked
+
+# ===== segmentation ===========================================
+
+def segmentation(img, nb_points):
+    nb_pixel = img.shape[0] * img.shape[1]
+    nb_in_a_groupe = 0
+
+    # palier a partir duquel la difference entre 2 couleurs est trop elevee
+    thresh = 30
+
+    largeur = img.shape[1]
+    hauteur = img.shape[0]
+
+    tab, groupes, avg_grp_col, stack, nb_in_groupes, checked = init_segmentation(img, nb_points)
+
+    print("============================")
+    print("GROWING")
+    print("Nb pixels: ", nb_pixel)
+
     max_step = 1000000
     step = 0
 
-    while len(stack) > 0 and step < max_step:
-        if step % 200 == 0:
+    while len(stack) > 0:# and step < max_step:
+        # print(len(stack), end="\r")
+        if step % 2000 == 0:
             print(nb_in_a_groupe / nb_pixel * 100, end="\r")
 
-        ptx, pty = stack.pop(0)
+        ptx, pty = stack.popleft()
 
         # groupe du point
         g = tab[ptx, pty]
 
         # on parcours les voisins du point
-        for (diff_x, diff_y) in [(0, 1), (1, 0), (-1, 0), (0, -1)]:
+        for (diff_x, diff_y) in [(0, 1), (1, 0), (-1, 0), (0, -1)]:#, (-1, -1), (1, 1), (-1, 1), (1, -1)]:
             v_ptx = ptx + diff_x
             v_pty = pty + diff_y
 
             # on verifie que le point est bien dans l'image
-            if 0 <= v_ptx < img.shape[0] and 0 <= v_pty < img.shape[1]:
+            if 0 <= v_ptx < hauteur and 0 <= v_pty < largeur:
                 # groupe du voisin
                 v_g = tab[v_ptx, v_pty]
 
                 # si le point n'appartient a aucune case
                 if v_g == 0:
+                    # on verifie que le point n'a pas deja ete check
+                    # if checked[v_ptx, v_pty, g] != 0: continue
+                    # checked[v_ptx, v_pty, g] = 1
+
                     v_img = img[v_ptx, v_pty]
 
                     # si la couleur du point est similaire a celle du groupe
-                    if distance(v_img, avg_grp_col[g]) < thresh:
+                    if distance(v_img, avg_grp_col[g]) < 1 * thresh:
                         tab[v_ptx, v_pty] = g
 
                         # on met a jour les infos du groupe
-                        avg_grp_col[g] = (avg_grp_col[g] * nb_in_groupes[g] + v_img) / (nb_in_groupes[g] + 1)
+                        if step % 1 == 0:
+                            avg_grp_col[g] = (avg_grp_col[g] * nb_in_groupes[g] + v_img) / (nb_in_groupes[g] + 1)
                         nb_in_groupes[g] += 1
 
                         nb_in_a_groupe += 1
 
                         stack.append((v_ptx, v_pty))
                 elif v_g != g:  # on tente de merge les groupes de ces 2 cases adjacentes
-                    if distance(avg_grp_col[v_g], avg_grp_col[g]) < thresh:
-                        tab[tab == v_g] = g
+                    if True: #step % 1 == 0:
+                            if distance(avg_grp_col[v_g], avg_grp_col[g]) < thresh:
+                                tab[tab == v_g] = g
 
-                        # on met a jour la couleur du groupe
-                        avg_grp_col[g] = (avg_grp_col[g] * nb_in_groupes[g] + avg_grp_col[v_g] * nb_in_groupes[v_g]) / (nb_in_groupes[g] + nb_in_groupes[v_g])
+                                # on met a jour la couleur du groupe
+                                avg_grp_col[g] = (avg_grp_col[g] * nb_in_groupes[g] + avg_grp_col[v_g] * nb_in_groupes[v_g]) / (nb_in_groupes[g] + nb_in_groupes[v_g])
 
 
         step += 1
@@ -179,15 +202,23 @@ def segmentation(img, nb_points):
             # groupes[imin].append((v_ptx, v_pty))
 
 
+
+    return creation_image_segmente(img, tab, nb_points, avg_grp_col)
+
+def creation_image_segmente(img, tab, nb_points, avg_grp_col):
     image_segmente = np.zeros(img.shape[:])
 
     # reconstruction d'une image avec la couleur de chaque point etant la couleur du groupe auquel il appartient
     for j in tqdm(range(1, nb_points+1)):
         groupe = np.where(tab == j)
+        col = j * (200 / nb_points) + 15
+        col0 = random.random() * 150 + 30
+        col1 = random.random() * 150 + 30
+        col2 = random.random() * 150 + 30
         for ptx, pty in zip(groupe[0], groupe[1]):
-            image_segmente[ptx, pty, 0] = avg_grp_col[j, 0]
-            image_segmente[ptx, pty, 1] = avg_grp_col[j, 1]
-            image_segmente[ptx, pty, 2] = avg_grp_col[j, 2]
+            image_segmente[ptx, pty, 0] = col0
+            image_segmente[ptx, pty, 1] = col1
+            image_segmente[ptx, pty, 2] = col2
 
     image_segmente = np.round(image_segmente)
     image_segmente = image_segmente.astype('int64')
@@ -213,6 +244,7 @@ def smoothing(img):
 # ===== Fonctions utilitaires ==================================
 
 def distance(a, b):
+    # return np.sum(np.abs(a-b))
     return np.linalg.norm(a - b)
 
 # ===== main ===================================================
@@ -223,12 +255,12 @@ def main():
     # on convertit l'image en rgb
     img = cv.cvtColor(img_bgr, cv.COLOR_BGR2RGB)
 
-    img = smoothing(img)
+    # img = smoothing(img)
 
-    plt.imshow(img)
-    plt.show()
+    # plt.imshow(img)
+    # plt.show()
 
-    tab = segmentation(img, 1000)
+    tab = segmentation(img, 500)
 
     plt.imshow(tab)
     plt.show()
