@@ -283,10 +283,10 @@ class Segmentor {
 	Mat create_seg_img(void) {
 	    // on recree une image en colorant chaque pixels appartenant au meme groupe de la meme couleur aleatoire
 	    printf("create_seg_imge\n");
-	    double cols[(this->nb_germes+1)*3];
+	    int cols[(this->nb_germes+1)*3];
 
 	    std::default_random_engine generator;
-	    std::uniform_int_distribution<double> distribution(50,200);
+	    std::uniform_int_distribution<int> distribution(50,200);
 
 	    // creation de couleurs aleatoires pour chaque groupe pour colorer l'image
 	    for (int i = 3; i < (this->nb_germes+1) * 3; i+=3) {
@@ -304,9 +304,9 @@ class Segmentor {
 		for (int y = 0; y < this->hau; ++y) {
 		    g = this->val_groupe[(int) this->tab.at<double>(x, y)];
 		    //std::cout << "VG: " << g << " / " << this->tab.at<double>(x, y) << std::endl;
-		    img_seg.at<Vec3b>(x, y)[0] = cols[g*3];
-		    img_seg.at<Vec3b>(x, y)[1] = cols[g*3+1];
-		    img_seg.at<Vec3b>(x, y)[2] = cols[g*3+2];
+		    img_seg.at<Vec3b>(x, y)[0] = (double) cols[g*3];
+		    img_seg.at<Vec3b>(x, y)[1] = (double) cols[g*3+1];
+		    img_seg.at<Vec3b>(x, y)[2] = (double) cols[g*3+2];
 		}
 	    }
 
