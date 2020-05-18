@@ -38,7 +38,7 @@ class Segmentor {
 	int *nb_in_groupe;
 
 	// vrai groupe de chaque groupe;
-	double *val_groupe;
+	int *val_groupe;
 
 	// tableau contenant pour chaque point l'index du groupe auquel il appartient ou alors 0
 	Mat tab;
@@ -96,13 +96,13 @@ class Segmentor {
 	    int* germes = this->create_germes_regular();
 
 	    Size img_size = img.size();
-	    this->tab.create(img_size, CV_64F);
+	    this->tab.create(img_size, CV_32S);
 	    this->avg_grp_col = new double[this->nb_germes+1];
 	    this->nb_in_groupe = new int[this->nb_germes+1];
 	    this->nb_in_groupes = 0;
 
 	    this->groupes = new std::vector<int>[this->nb_germes+1];
-	    this->val_groupe = new double[this->nb_germes+1];
+	    this->val_groupe = new int[this->nb_germes+1];
 
 	    this->val_groupe[0] = 0;
 	    for (int i = 1; i < nb_germes+1; ++i) {
@@ -116,7 +116,7 @@ class Segmentor {
 		//printf("for %d: %d %d\n", (double)i/2, x, y);
 
 		this->nb_in_groupes++;
-		this->tab.at<double>(x, y) = (double) i/2;
+		this->tab.at<int>(x, y) = i/2;
 		this->avg_grp_col[i/2] = this->img.at<uchar>(x, y);
 		this->nb_in_groupe[i/2] = 1;
 
@@ -161,7 +161,7 @@ class Segmentor {
 	void grow(void) {
 	    printf("Grow\n");
 	    int x, y;
-	    double g;
+	    int g;
 	    while(!this->queue.empty()) {
 		if(this->step % 10000 == 0) {
 		    //printf("Step: %d / %d of %d in groupes / %d\n", this->step, this->nb_in_groupes, this->nb_pixels, this->queue.size());
@@ -173,7 +173,7 @@ class Segmentor {
 
 		// groupe du point
 		// TODO: voir pour template si je peux pas directe mettre int
-		g = this->tab.at<double>(x, y);
+		g = this->tab.at<int>(x, y);
 		//std::cout << "Groupe: " << g << std::endl;
 
 		if(y + 1 < this->hau)
@@ -193,7 +193,7 @@ class Segmentor {
 	void add_voisin(int i, int x, int y, int g, int vx, int vy) {
 	    // check si le voisin est suffisement proche du groupe du point pour etre ajoute
 
-	    double vg = this->tab.at<double>(vx, vy);
+	    int vg = this->tab.at<int>(vx, vy);
 
 	    // si le voisin n'appartient a aucun groupe
 	    if(vg == 0) {
@@ -203,11 +203,11 @@ class Segmentor {
 		// si le voisin est proche de la couleur moyenne du groupe
 		    //printf("Col: %d / diff: %d\n", vcol, abs(vcol - this->avg_grp_col[g]));
 		double dist = abs(vcol - this->avg_grp_col[g]);
-		if(pow(dist, 2) <= 50) {
+		if(dist <= 50) {
 
 		    // on rajoute le point au groupe
 		    //printf("groupe: %f / diff: %d\n", vg, abs(vcol - this->avg_grp_col[g]));
-		    this->tab.at<double>(vx, vy) = g;
+		    this->tab.at<int>(vx, vy) = g;
 		    //std::cout << "New Groupe: " << this->tab.at<double>(vx, vy) << std::endl;
 
 		    // on met a jour les infos du groupe
@@ -224,12 +224,12 @@ class Segmentor {
 	}
 
 	void merge(void) {
-	    double g;
+	    int g;
 	    std::cout << "MERGE" << std::endl;
 	    for (int x = 0; x < this->lar; ++x) {
 		//std::cout << x << std::endl;
 		for (int y = 0; y < this->hau; ++y) {
-		    g = this->tab.at<double>(x, y);
+		    g = this->tab.at<int>(x, y);
 
 		    if(y + 1 < this->hau)
 			this->merge_voisin(0, x, y, g, x, y+1);
@@ -246,21 +246,21 @@ class Segmentor {
 
 	void merge_voisin(int i, int x, int y, int g, int vx, int vy) {
 	    //std::cout << (int) this->tab.at<double>(vx, vy) << std::endl;
-	    double vg = this->val_groupe[(int) this->tab.at<double>(vx, vy)];
+	    int vg = this->val_groupe[this->tab.at<int>(vx, vy)];
 	    //double vg = this->tab.at<double>(vx, vy);
 
 	    if(vg != g) {
-		// les deux pixels sont des des groupes differents donc on tente le merge
-		double dist = abs(this->avg_grp_col[(int)vg] - this->avg_grp_col[(int)g]);
-		if(pow(dist, 2) <= 30) {
+		// les deux pixels sont dans des groupes differents donc on tente le merge de groupes
+		int dist = abs(this->avg_grp_col[vg] - this->avg_grp_col[g]);
+		if(pow(dist, 2) <= 40) {
 		    //std::cout << "Remplace: " << vg << " / " << g << std::endl;
 
 		    double avg_g = this->avg_grp_col[g] * this->nb_in_groupe[g];
-		    double avg_vg = this->avg_grp_col[(int)vg] * this->nb_in_groupe[(int)vg];
+		    double avg_vg = this->avg_grp_col[vg] * this->nb_in_groupe[vg];
 
-		    this->avg_grp_col[g] = (avg_g + avg_vg) / (this->nb_in_groupe[g] + this->nb_in_groupe[(int)vg]);
-		    this->nb_in_groupe[g] += this->nb_in_groupe[(int) vg];
-		    this->nb_in_groupe[(int) vg] = 0;
+		    this->avg_grp_col[g] = (avg_g + avg_vg) / (this->nb_in_groupe[g] + this->nb_in_groupe[vg]);
+		    this->nb_in_groupe[g] += this->nb_in_groupe[vg];
+		    this->nb_in_groupe[vg] = 0;
 
 		    for (int i = 1; i < this->nb_germes+1; ++i) {
 			if(this->val_groupe[i] == vg) {
@@ -268,13 +268,6 @@ class Segmentor {
 			    //std::cout << "test: " << this->val_groupe[i] << " / vg: " << vg << " / g: " << g << std::endl;
 			}
 		    }
-
-		    //this->tab.forEach<Pixel> ( [vg, g](Pixel &pixel, const int * position) -> void {
-			//if(pixel.x == vg) {
-			    //pixel.x = g;
-			//}
-		      //}
-		    //);
 		}
 	    }
 	}
@@ -290,23 +283,25 @@ class Segmentor {
 
 	    // creation de couleurs aleatoires pour chaque groupe pour colorer l'image
 	    for (int i = 3; i < (this->nb_germes+1) * 3; i+=3) {
+		//std::cout << "cG: " << i << " / " << this->val_groupe[i] << std::endl;
 		cols[i] = distribution(generator);
 		cols[i+1] = distribution(generator);
 		cols[i+2] = distribution(generator);
 	    }
 
-	    int g;
 	    Size img_size = this->img.size();
 	    Mat img_seg;
 	    img_seg.create(img_size, CV_8UC3);
 
+	    int g;
+
 	    for (int x = 0; x < this->lar; ++x) {
 		for (int y = 0; y < this->hau; ++y) {
-		    g = this->val_groupe[(int) this->tab.at<double>(x, y)];
-		    //std::cout << "VG: " << g << " / " << this->tab.at<double>(x, y) << std::endl;
-		    img_seg.at<Vec3b>(x, y)[0] = (double) cols[g*3];
-		    img_seg.at<Vec3b>(x, y)[1] = (double) cols[g*3+1];
-		    img_seg.at<Vec3b>(x, y)[2] = (double) cols[g*3+2];
+		    g = this->val_groupe[this->tab.at<int>(x, y)];
+		    //std::cout << "VG: " << g << " / " << this->tab.at<int>(x, y) << std::endl;
+		    img_seg.at<Vec3b>(x, y)[0] = (uchar) cols[g*3];
+		    img_seg.at<Vec3b>(x, y)[1] = (uchar) cols[g*3+1];
+		    img_seg.at<Vec3b>(x, y)[2] = (uchar) cols[g*3+2];
 		}
 	    }
 
@@ -374,6 +369,6 @@ int main( int argc, const char** argv ) {
 
     Segmentor seg = Segmentor();
     Mat img_seg = seg.segmentation(gray, 1001);
-    //imshow("fdfdf", img_seg);
-    //waitKey(0);
+    imshow("fdfdf", img_seg);
+    waitKey(0);
 }
