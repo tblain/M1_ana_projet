@@ -6,14 +6,21 @@
 #include <queue>
 #include <random>
 #include <typeinfo>
+#include <chrono>
 
 #include <stdio.h>
 #include <iostream>
 
 using namespace cv;
 using namespace std;
+using namespace std::chrono;
 
 typedef cv::Point3_<uint8_t> Pixel;
+
+uint64_t timeSinceEpochMillisec() {
+  using namespace std::chrono;
+  return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
 
 // =========== Segmentor =======================================================
 
@@ -55,10 +62,11 @@ class Segmentor {
 
 	// ==========================================================================
 	int* create_germes_regular(void) {
+	    std::cout << "=================================" << std::endl;
 	    printf("create_germes_random\n");
+
 	    int* germes = new int[2 * (this->nb_germes+1)];
 	    int dist_between_pts = this->nb_pixels / this->nb_germes;
-	    std::cout << "Dist: " << dist_between_pts << " / " << this->lar << std::endl;
 
 	    for (int i = 2; i < (this->nb_germes+1)*2; i+=2) {
 		int n = dist_between_pts * i / 2;
@@ -67,7 +75,6 @@ class Segmentor {
 
 		germes[i] = x;
 		germes[i+1] = y;
-		//std::cout << "Point: " << n << " : " << x << " / " << y << std::endl;
 	    }
 
 	    return germes;
@@ -75,6 +82,7 @@ class Segmentor {
 
 	// ==========================================================================
 	int* create_germes_random(void) {
+	    std::cout << "=================================" << std::endl;
 	    printf("create_germes_random\n");
 	    int* germes = new int[2 * (this->nb_germes+1)];
 
@@ -92,6 +100,7 @@ class Segmentor {
 
 	// ==========================================================================
 	void init_segmentation(void) {
+	    std::cout << "=================================" << std::endl;
 	    printf("init_segmentation\n");
 	    int* germes = this->create_germes_regular();
 
@@ -110,10 +119,10 @@ class Segmentor {
 	    }
 
 	    int x, y;
+	    // on instancie les seeds
 	    for (int i = 2; i < (this->nb_germes+1)*2; i+=2) {
 		x = germes[i];
 		y = germes[i+1];
-		//printf("for %d: %d %d\n", (double)i/2, x, y);
 
 		this->nb_in_groupes++;
 		this->tab.at<int>(x, y) = i/2;
@@ -137,6 +146,7 @@ class Segmentor {
 
 	// ==========================================================================
 	Mat segmentation(Mat img, int nb_germes) {
+	    std::cout << "=================================" << std::endl;
 	    printf("Seg\n");
 	    this->img = img;
 	    this->nb_germes = nb_germes;
@@ -159,22 +169,21 @@ class Segmentor {
 
 	// ==========================================================================
 	void grow(void) {
+	    std::cout << "=================================" << std::endl;
 	    printf("Grow\n");
+	    uint64_t t1 = timeSinceEpochMillisec();
 	    int x, y;
 	    int g;
 	    while(!this->queue.empty()) {
-		if(this->step % 10000 == 0) {
-		    //printf("Step: %d / %d of %d in groupes / %d\n", this->step, this->nb_in_groupes, this->nb_pixels, this->queue.size());
-		}
+		//if(this->step % 10000 == 0) {
+		    //printf("\rStep: %d / %d of %d in groupes / %d", this->step, this->nb_in_groupes, this->nb_pixels, this->queue.size());
+		//}
 
 		x = this->queue.front(); this->queue.pop();
 		y = this->queue.front(); this->queue.pop();
-		//printf("X: %d / Y: %d\n", x, y);
 
 		// groupe du point
-		// TODO: voir pour template si je peux pas directe mettre int
 		g = this->tab.at<int>(x, y);
-		//std::cout << "Groupe: " << g << std::endl;
 
 		if(y + 1 < this->hau)
 		    this->add_voisin(0, x, y, g, x, y+1);
@@ -187,6 +196,8 @@ class Segmentor {
 
 		this->step++;
 	    }
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "\nTemps double for: " << t2 - t1 << " ms" << std::endl;
 
 	}
 
@@ -197,18 +208,15 @@ class Segmentor {
 
 	    // si le voisin n'appartient a aucun groupe
 	    if(vg == 0) {
-		//std::cout << "Dedans: " << vg << std::endl;
 		unsigned char vcol = this->img.at<uchar>(vx, vy);
 
 		// si le voisin est proche de la couleur moyenne du groupe
-		    //printf("Col: %d / diff: %d\n", vcol, abs(vcol - this->avg_grp_col[g]));
 		double dist = abs(vcol - this->avg_grp_col[g]);
+
 		if(dist <= 50) {
 
 		    // on rajoute le point au groupe
-		    //printf("groupe: %f / diff: %d\n", vg, abs(vcol - this->avg_grp_col[g]));
 		    this->tab.at<int>(vx, vy) = g;
-		    //std::cout << "New Groupe: " << this->tab.at<double>(vx, vy) << std::endl;
 
 		    // on met a jour les infos du groupe
 
@@ -224,7 +232,9 @@ class Segmentor {
 	}
 
 	void merge(void) {
+	    uint64_t t1 = timeSinceEpochMillisec();
 	    int g;
+	    std::cout << "=================================" << std::endl;
 	    std::cout << "MERGE" << std::endl;
 	    for (int x = 0; x < this->lar; ++x) {
 		//std::cout << x << std::endl;
@@ -241,6 +251,8 @@ class Segmentor {
 			this->merge_voisin(3, x, y, g, x-1, y);
 		}
 	    }
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "Temps: " << t2 - t1 << " ms" << std::endl;
 
 	}
 
@@ -275,6 +287,7 @@ class Segmentor {
 	// ==========================================================================
 	Mat create_seg_img(void) {
 	    // on recree une image en colorant chaque pixels appartenant au meme groupe de la meme couleur aleatoire
+	    std::cout << "=================================" << std::endl;
 	    printf("create_seg_imge\n");
 	    int cols[(this->nb_germes+1)*3];
 
@@ -293,8 +306,9 @@ class Segmentor {
 	    Mat img_seg;
 	    img_seg.create(img_size, CV_8UC3);
 
-	    int g;
+	    uint64_t t1 = timeSinceEpochMillisec();
 
+	    int g;
 	    for (int x = 0; x < this->lar; ++x) {
 		for (int y = 0; y < this->hau; ++y) {
 		    g = this->val_groupe[this->tab.at<int>(x, y)];
@@ -304,6 +318,20 @@ class Segmentor {
 		    img_seg.at<Vec3b>(x, y)[2] = (uchar) cols[g*3+2];
 		}
 	    }
+
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "Temps double for: " << t2 - t1 << " ms" << std::endl;
+
+	    //img_seg.forEach<Pixel> ( [&cols, this](Pixel &pixel, const int * position) -> void {
+		    //int g = this->val_groupe[this->tab.at<int>(position[0], position[1])];
+		    //pixel.x = (uchar) cols[g*3];
+		    //pixel.y = (uchar) cols[g*3+1];
+		    //pixel.z = (uchar) cols[g*3+2];
+	      //}
+	    //);
+
+	    //uint64_t t2 = timeSinceEpochMillisec();
+	    //std::cout << "Temps double for: " << t2 - t1 << " ms" << std::endl;
 
 	    std::cout << "FINISH" << std::endl;
 	    return img_seg;
@@ -364,8 +392,6 @@ int main( int argc, const char** argv ) {
 
     //imshow("fdfdf", img);
     //waitKey(0);
-    //printf("%s\n", type2str(gray.type()).c_str());
-    //printf("%s\n", type2str(image.type()).c_str());
 
     Segmentor seg = Segmentor();
     Mat img_seg = seg.segmentation(gray, 1001);
