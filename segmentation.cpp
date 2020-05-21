@@ -2,6 +2,7 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/highgui.hpp"
+#include <opencv2/core/mat.hpp>
 
 #include <queue>
 #include <random>
@@ -333,8 +334,78 @@ class Segmentor {
 	    //uint64_t t2 = timeSinceEpochMillisec();
 	    //std::cout << "Temps double for: " << t2 - t1 << " ms" << std::endl;
 
+	    // Tracage des contours
+	    this->trace_contour(img_seg);
+
 	    std::cout << "FINISH" << std::endl;
 	    return img_seg;
+	}
+
+	void trace_contour(Mat img_seg) {
+	    Mat edge1, edge2, kernel1, kernel2, img_seg_gray;
+	    //kernel1.create(Size(3,3), CV_8UC3);
+	    //kernel2.create(Size(3,3), CV_8UC3);
+
+	    //kernel1.at<uchar>(0, 0) = 1;
+	    //kernel1.at<uchar>(0, 1) = 1;
+	    //kernel1.at<uchar>(0, 2) = 1;
+
+	    //kernel1.at<uchar>(2, 0) = -1;
+	    //kernel1.at<uchar>(2, 1) = -1;
+	    //kernel1.at<uchar>(2, 2) = -1;
+
+	    //cv::Mat kernelH(3, 1, CV_32F);
+	    //kernelH.at<float>(0,0) = 1.0f;
+	    //kernelH.at<float>(1,0) = 0.0f;
+	    //kernelH.at<float>(2,0) = -1.0f;
+
+	    //cv::Mat kernelV(1, 3, CV_32F);
+	    //kernelV.at<float>(0,0) = 1.0f;
+	    //kernelV.at<float>(0,1) = 0.0f;
+	    //kernelV.at<float>(0,2) = -1.0f;
+
+	    cv::Mat kernelH(3, 3, CV_32F);
+	    kernelH.at<float>(0,0) = 1.0f;
+	    kernelH.at<float>(0,1) = 1.0f;
+	    kernelH.at<float>(0,2) = 1.0f;
+
+	    kernelH.at<float>(1,0) = 0.0f;
+	    kernelH.at<float>(1,1) = 0.0f;
+	    kernelH.at<float>(1,2) = 0.0f;
+
+	    kernelH.at<float>(2,0) = -1.0f;
+	    kernelH.at<float>(2,1) = -1.0f;
+	    kernelH.at<float>(2,2) = -1.0f;
+
+	    cv::Mat kernelV(3, 3, CV_32F);
+	    kernelV.at<float>(0,0) = 1.0f;
+	    kernelV.at<float>(1,0) = 1.0f;
+	    kernelV.at<float>(2,0) = 1.0f;
+
+	    kernelV.at<float>(0,1) = 0.0f;
+	    kernelV.at<float>(1,1) = 0.0f;
+	    kernelV.at<float>(2,1) = 0.0f;
+
+	    kernelV.at<float>(0,2) = -1.0f;
+	    kernelV.at<float>(1,2) = -1.0f;
+	    kernelV.at<float>(2,2) = -1.0f;
+
+	    cvtColor(img_seg, img_seg_gray, COLOR_BGR2GRAY);
+
+	    cv::filter2D(img_seg_gray, edge1, -1, kernelH);
+	    cv::filter2D(img_seg_gray, edge2, -1, kernelV);
+
+	    Mat res;
+	    cv::add(edge1, edge2, res);
+
+	    img_seg.forEach<Pixel> ( [res](Pixel &pixel, const int * position) -> void {
+		    if(res.at<uchar>(position[0], position[1]) != 0) {
+			pixel.x = (uchar) 255;
+			pixel.y = (uchar) 255;
+			pixel.z = (uchar) 255;
+		    }
+	      }
+	    );
 	}
 
 	~Segmentor(){
