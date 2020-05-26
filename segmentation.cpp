@@ -85,6 +85,152 @@ class Segmentor {
 	}
 
 	// ==========================================================================
+
+	int* create_germes_square(void) {
+	    uint64_t t1 = timeSinceEpochMillisec();
+	    // germe vector
+
+	    // square size
+	    int ss = 25;
+
+	    int shau = this->hau / ss;
+	    int slar = this->hau / ss;
+
+	    cv::Mat kernelH(3, 3, CV_32F);
+	    cv::Mat kernelV(3, 3, CV_32F);
+
+	    for (int i = 0; i < 3; ++i) {
+		kernelH.at<float>(i,0) = 1.0f;
+		kernelH.at<float>(i,1) = 0.0f;
+		kernelH.at<float>(i,2) = -1.0f;
+
+		kernelV.at<float>(0,i) = 1.0f;
+		kernelV.at<float>(1,i) = 0.0f;
+		kernelV.at<float>(2,i) = -1.0f;
+	    }
+
+	    Mat edge1, edge2, res;
+
+	    cv::filter2D(this->img, edge1, -1, kernelH);
+	    cv::filter2D(this->img, edge2, -1, kernelV);
+
+	    abs(edge1);
+	    abs(edge2);
+
+	    cv::add(edge1, edge2, res);
+
+	    int* changes = new int[shau * slar];
+
+	    // mis a zero de changes
+	    for (int i = 0; i < slar; ++i) {
+		for (int j = 0; j < shau; ++j) {
+		    changes[i * slar + j] = 0;
+		}
+	    }
+
+	    this->img.forEach<Pixel> ( [changes, slar, shau, res, ss](Pixel &pixel, const int * position) -> void {
+		changes[ (position[0] / ss ) * slar + (position[1] / ss) ] += (int) res.at<uchar>(position[0], position[1]);
+	      }
+	    );
+
+	    std::default_random_engine generator;
+	    std::uniform_int_distribution<int> distribution_coord(0, ss-1);
+	    std::uniform_int_distribution<int> distribution_spawn(0, 20);
+
+	    int x, y;
+	    this->nb_germes = 1;
+
+	    int size = shau * slar * 8 * 2;
+	    int* germes = new int[size];
+
+	    int circled = 2;
+	    int pal1=0, pal1fond=0, pal2=0, pal3=0;
+	    int pal1_thres = 100, pal2thres = 150;
+	    int change;
+
+	    for (int i = 0; i < slar; ++i) {
+		for (int j = 0; j < shau; ++j) {
+		    change = changes[i * slar + j];
+
+		    //cout << "i: " << i << " / j: " << j << " / change: " << change <<endl;
+
+		    if(change < pal1_thres) {
+			pal1++;
+
+			circled = 2;
+
+			if(i + 1 < slar && changes[(i+1) * slar + j] > pal1_thres + 50)
+			    circled--;
+			if(i - 1 >= 0 && changes[(i-1) * slar + j] > pal1_thres + 50)
+			    circled--;
+			if(j - 1 < shau && changes[i * slar + (j-1)] > pal1_thres + 50)
+			    circled--;
+			if(j - 1 >= 0 && changes[i * slar + (j-1)] > pal1_thres + 50)
+			    circled--;
+
+			if(circled >= 0 && distribution_spawn(generator) == 0) {
+			    pal1fond++;
+
+			    x = i * ss + distribution_coord(generator);
+			    y = j * ss + distribution_coord(generator);
+			    germes[this->nb_germes*2] = x;
+			    germes[this->nb_germes*2+1] = y;
+			    this->nb_germes++;
+
+			} else {
+
+			    if(distribution_spawn(generator) < 20 - 5) {
+				x = i * ss + distribution_coord(generator);
+				y = j * ss + distribution_coord(generator);
+				germes[this->nb_germes*2] = x;
+				germes[this->nb_germes*2+1] = y;
+				this->nb_germes++;
+			    }
+			}
+
+		    } else if(change < 100) {
+			pal2++;
+
+			for (int q = 0; q < 2; ++q) {
+			    x = i + distribution_coord(generator);
+			    y = j + distribution_coord(generator);
+			    germes[this->nb_germes*2] = x;
+			    germes[this->nb_germes*2+1] = y;
+			    this->nb_germes++;
+			}
+
+		    } else {
+			pal3++;
+
+			for (int q = 0; q < 1; ++q) {
+			    x = i + distribution_coord(generator);
+			    y = j + distribution_coord(generator);
+			    germes[this->nb_germes*2] = x;
+			    germes[this->nb_germes*2+1] = y;
+			    this->nb_germes++;
+			}
+
+		    }
+		}
+	    }
+
+	    cout << "changes: " << shau * slar << endl;
+	    cout << "changes dim: " << shau << " / " << slar << endl;
+	    cout << "tailes germes: " << size << endl;
+	    cout << "pal1: " << pal1 << endl;
+	    cout << "pal1fond: " << pal1fond << endl;
+	    cout << "pal2: " << pal2 << endl;
+	    cout << "pal3: " << pal3 << endl;
+	    cout << "nb germes: " << this->nb_germes << endl;
+	    cout << "nb germes * 2: " << (this->nb_germes+1) * 2 - 2 << endl;
+
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "\nTemps Germes square: " << t2 - t1 << " ms" << std::endl;
+
+	    return germes;
+	}
+
+	// ==========================================================================
 	int* create_germes_random(void) {
 	    int* germes = new int[2 * (this->nb_germes+1)];
 
@@ -105,6 +251,7 @@ class Segmentor {
 	    int* germes = this->create_germes_regular();
 
 	    Size img_size = img.size();
+	    cout << "size: " << img_size << endl;
 	    this->tab = cv::Mat::zeros(img_size, CV_32S);
 	    this->tab.create(img_size, CV_32S);
 	    this->avg_grp_col = new double[this->nb_germes+1];
@@ -122,9 +269,10 @@ class Segmentor {
 
 	    int x, y, g;
 	    // on instancie les seeds
-	    for (int i = 2; i < (this->nb_germes+1)*2; i+=2) {
+	    for (int i = 2; i < (this->nb_germes+1)*2 - 2; i+=2) {
 		x = germes[i];
 		y = germes[i+1];
+		//cout << "x: " << x << endl;
 
 		g = i/2;
 
@@ -178,9 +326,9 @@ class Segmentor {
 
 	// ==========================================================================
 	void grow(void) {
-	    //std::cout << "=================================" << std::endl;
-	    //printf("Grow\n");
-	    //uint64_t t1 = timeSinceEpochMillisec();
+	    std::cout << "=================================" << std::endl;
+	    printf("Grow\n");
+	    uint64_t t1 = timeSinceEpochMillisec();
 	    int x, y, g;
 	    while(!this->queue.empty()) {
 		//if(this->step % 10 == 0) {
@@ -205,8 +353,8 @@ class Segmentor {
 
 		this->step++;
 	    }
-	    //uint64_t t2 = timeSinceEpochMillisec();
-	    //std::cout << "\nTemps double for: " << t2 - t1 << " ms" << std::endl;
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "\nTemps double for: " << t2 - t1 << " ms" << std::endl;
 	}
 
 	void add_voisin(int i, int x, int y, int g, int vx, int vy) {
@@ -240,9 +388,9 @@ class Segmentor {
 	}
 
 	void merge(void) {
-	    //uint64_t t1 = timeSinceEpochMillisec();
-	    //std::cout << "=================================" << std::endl;
-	    //std::cout << "MERGE" << std::endl;
+	    uint64_t t1 = timeSinceEpochMillisec();
+	    std::cout << "=================================" << std::endl;
+	    std::cout << "MERGE" << std::endl;
 	    int g;
 	    for (int x = 0; x < this->lar; ++x) {
 		for (int y = 0; y < this->hau; ++y) {
@@ -258,8 +406,8 @@ class Segmentor {
 			this->merge_voisin(3, x, y, g, x-1, y);
 		}
 	    }
-	    //uint64_t t2 = timeSinceEpochMillisec();
-	    //std::cout << "Temps: " << t2 - t1 << " ms" << std::endl;
+	    uint64_t t2 = timeSinceEpochMillisec();
+	    std::cout << "Temps: " << t2 - t1 << " ms" << std::endl;
 
 	}
 
@@ -455,12 +603,12 @@ int main( int argc, const char** argv ) {
 		break;
 	    }
 
-	    std::cout << "\n----------------------------------------\n" << std::endl;
+	    std::cout << "\nlllllllllllllllllllllllllllllllllllllllllll\n" << std::endl;
 
 	    uint64_t t1 = timeSinceEpochMillisec();
 
-	    bilateralFilter(frame, img, 10, 25, 25);
-	    //GaussianBlur(frame, img, Size(15, 15), 20, 20);
+	    //bilateralFilter(frame, img, 10, 25, 25);
+	    GaussianBlur(frame, img, Size(15, 15), 15, 15);
 	    //blur(frame, img, Size(3, 3));
 
 	    cvtColor(img, gray, COLOR_BGR2GRAY);
@@ -469,10 +617,10 @@ int main( int argc, const char** argv ) {
 	    std::cout << "Temps prep: " << t2 - t1 << " ms" << std::endl;
 
 	    // img, nb_seeds, merge_thresh, grow_thresh, display_true_col
-	    Mat img_seg = seg.segmentation(gray, 1001, 80, 10, true);
+	    Mat img_seg = seg.segmentation(gray, 101, 150, 30, false);
 
 	    uint64_t t3 = timeSinceEpochMillisec();
-	    std::cout << "Temps Total: " << t3 - t1 << " ms" << std::endl;
+	    std::cout << endl << "Temps Total: " << t3 - t1 << " ms" << std::endl;
 
 	    //imshow("fdfdf", gray);
 	    //waitKey(0);
@@ -491,23 +639,26 @@ int main( int argc, const char** argv ) {
 	    return -1;
 	}
 
-	bilateralFilter(base_image, img, 5, 15, 15);
+	//bilateralFilter(base_image, img, 5, 15, 15);
+	GaussianBlur(base_image, img, Size(15, 15), 15, 15);
 
 	cvtColor(img, gray, COLOR_BGR2GRAY);
 
+	//imshow("fdfdf", gray);
+	//waitKey(0);
+
 	Segmentor seg = Segmentor();
 
-	uint64_t t2 = timeSinceEpochMillisec();
-	std::cout << "Temps prepar: " << t2 - t1 << " ms" << std::endl;
+	//uint64_t t2 = timeSinceEpochMillisec();
+	//std::cout << "Temps prepar: " << t2 - t1 << " ms" << std::endl;
 
 	// img, nb_seeds, merge_thresh, grow_thresh
-	Mat img_seg = seg.segmentation(gray, 1001, 100, 10, true);
+	Mat img_seg = seg.segmentation(gray, 2001, 150, 15, false);
 
 	uint64_t t3 = timeSinceEpochMillisec();
 	std::cout << "Temps Total: " << t3 - t1 << " ms" << std::endl;
 
 	imshow("fdfdf", img_seg);
 	waitKey(0);
-
     }
 }
