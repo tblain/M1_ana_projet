@@ -12,9 +12,13 @@
 #include <stdio.h>
 #include <iostream>
 
+#define MAXFRAMESKIP 10
+
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
+
+int frameSkip = 0;
 
 typedef cv::Point3_<uint8_t> Pixel;
 
@@ -629,7 +633,52 @@ int main( int argc, const char** argv ) {
 	    waitKey(1);
 	    //sleep(1000);
 	}
-    } else {
+    } else if (filename == "tPoseMan.mp4")
+	{
+		VideoCapture capture("tPoseMan.mp4");
+
+		String file = "ResultVideo.avi";
+		Size S(640, 360);
+		int ex = VideoWriter::fourcc('X','V','I','D');
+		VideoWriter out(file, ex, capture.get(CAP_PROP_FPS), S);
+		while (capture.isOpened())
+		{
+			/*frameSkip++;
+			if (frameSkip >= MAXFRAMESKIP)
+			{
+				frameSkip = 0;
+			}*/
+			capture >> base_image;
+			/*if (frameSkip != 0)
+			{
+				continue;
+			}*/
+			
+			
+			uint64_t t1 = timeSinceEpochMillisec();
+			
+			if (base_image.empty())
+			{
+				return -1;
+			}
+			//filter ici
+			GaussianBlur(base_image, img, Size(15, 15), 15, 15);
+			cvtColor(img, gray, COLOR_BGR2GRAY);
+			
+			Segmentor seg = Segmentor();
+
+			Mat img_seg = seg.segmentation(gray, 2001, 150, 15, false);
+
+
+			uint64_t t3 = timeSinceEpochMillisec();
+			std::cout << "Temps Total: " << t3 - t1 << " ms" << std::endl;
+
+			imshow("Result", gray);
+			//write result
+			out.write(gray);
+		}
+		out.release();
+	} else {
 	uint64_t t1 = timeSinceEpochMillisec();
 
 	base_image = imread(samples::findFile(filename), IMREAD_COLOR);
@@ -658,7 +707,7 @@ int main( int argc, const char** argv ) {
 	uint64_t t3 = timeSinceEpochMillisec();
 	std::cout << "Temps Total: " << t3 - t1 << " ms" << std::endl;
 
-	imshow("fdfdf", img_seg);
+	imshow("Result", img_seg);
 	waitKey(0);
     }
 }
